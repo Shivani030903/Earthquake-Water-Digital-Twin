@@ -1,0 +1,5 @@
+node_id,type,demand,priority
+N1,reservoir,0,5
+N2,hospital,120,5
+N3,residential,80,1
+N4,firestation,100,4

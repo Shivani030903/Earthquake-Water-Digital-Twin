@@ -1,0 +1,4 @@
+pipe_id,from,to,length,material,age,soil,pressure_cap
+P1,N1,N2,500,CI,40,clay,80
+P2,N2,N3,300,PVC,10,sand,100
+P3,N2,N4,400,DI,20,rock,90
