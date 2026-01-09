@@ -1,5 +1,5 @@
-node_id,type,demand,priority
-N1,reservoir,0,5
-N2,hospital,120,5
-N3,residential,80,1
-N4,firestation,100,4
+node_id,type,demand,priority,lat,lon
+N1,reservoir,0,5,23.2599,77.4126
+N2,hospital,120,5,23.2610,77.4140
+N3,residential,80,1,23.2585,77.4162
+N4,firestation,100,4,23.2632,77.4108
