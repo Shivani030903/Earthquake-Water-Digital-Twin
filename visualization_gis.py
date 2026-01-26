@@ -51,7 +51,7 @@ def plot_gis_network(G):
         lat=lats,
         lon=lons,
         mode="markers",
-        marker=dict(size=10, color="black"),
+        marker=dict(size=10, color="red"),
         hoverinfo="none"
     ))
 

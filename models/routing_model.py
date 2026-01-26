@@ -21,3 +21,36 @@ def compute_routes(G, source, targets):
         except nx.NetworkXNoPath:
             routes[t] = None
     return routes
+
+def remove_failed_pipes(G):
+    """
+    Removes all pipes marked as failed from the graph
+    """
+    failed_edges = [
+        (u, v) for u, v, d in G.edges(data=True)
+        if d.get("status") == "failed"
+    ]
+    G.remove_edges_from(failed_edges)
+    return G
+
+# ------------------------------
+# ADD REROUTED (LOGICAL) EDGES
+# ------------------------------
+def add_rerouted_pipe(G, u, v):
+    """
+    Adds a logical reroute edge (NOT a real pipe)
+    """
+    G.add_edge(
+        u, v,
+        status="rerouted",
+        is_physical=False,   # 🚫 NOT a real pipe
+        failure_prob=0.0,
+        length=0             # logical edge
+    )
+    return G
+
+def mark_supply_status(G, source="N1"):
+    for n in G.nodes:
+        G.nodes[n]["supplied"] = nx.has_path(G, source, n)
+    return G
+

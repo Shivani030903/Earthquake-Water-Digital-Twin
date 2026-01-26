@@ -1,10 +1,31 @@
 import networkx as nx
 
+def get_operational_graph(G):
+    """
+    Returns a copy of the graph with failed pipes removed.
+    """
+    H = G.copy()
+
+    failed_edges = [
+        (u, v)
+        for u, v, d in G.edges(data=True)
+        if d.get("status") == "failed"
+    ]
+
+    H.remove_edges_from(failed_edges)
+    return H
+
 def allocate_water(G, total_supply, source="N1"):
+    
+    #  STEP 2A: Create operational graph
+    H = get_operational_graph(G)
+
+    #  STEP 2B: Use H instead of G
     reachable = [
         n for n in G.nodes
-        if nx.has_path(G, source, n)
+        if nx.has_path(H, source, n)
     ]
+
 
     if not reachable:
         # No reachable nodes → no allocation

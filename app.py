@@ -2,6 +2,7 @@ import streamlit as st
 import time
 
 from digital_twin import create_digital_twin
+from models.network_generator import generate_network
 from models.seismic_model import seismic_stress
 from models.risk_model import compute_risk
 from models.routing_model import compute_routes
@@ -19,6 +20,25 @@ from export import export_results
 # ---------------------------
 st.set_page_config(layout="wide")
 st.title("🌍 Earthquake-Aware Water Distribution Digital Twin")
+
+# ===========================
+# 🔹 SIDEBAR — NETWORK CONFIG
+# ===========================
+st.sidebar.header("🛠 Network Configuration")
+
+network_mode = st.sidebar.radio(
+    "Network Source",
+    ["Manual (CSV)", "Auto-Generated"]
+)
+
+if network_mode == "Auto-Generated":
+    n_nodes = st.sidebar.slider("Number of Nodes", 10, 100, 25)
+
+    if st.sidebar.button("Generate Network"):
+        n_nodes_created, n_pipes_created = generate_network(n_nodes)
+        st.sidebar.success(
+            f"Generated {n_nodes_created} nodes & {n_pipes_created} pipes"
+        )
 
 # ---------------------------
 # SESSION STATE (MUST BE FIRST)
@@ -61,6 +81,14 @@ time_step = st.slider("Simulation Time (minutes)", 0, 10, st.session_state.time)
 G_before = create_digital_twin()
 G_after = G_before.copy()
 
+# ---------------------------------
+# GEO-BASED NODE POSITIONS (lat/lon)
+# ---------------------------------
+fixed_pos = {
+    n: (d["lon"], d["lat"])
+    for n, d in G_before.nodes(data=True)
+}
+
 # ---------------------------
 # ML FEATURE MAPS
 # ---------------------------
@@ -78,33 +106,55 @@ soil_score = {
 }
 
 # ---------------------------
-# EARTHQUAKE + ML FAILURE PROBABILITY
+# CREATE DIGITAL TWIN
 # ---------------------------
-for u, v, data in G_after.edges(data=True):
-    base_stress = seismic_stress(magnitude, 5, data['soil'])
-    stress = temporal_stress(base_stress, time_step)
+G_before = create_digital_twin()
 
-    failure_prob = predict_failure_probability(
-        stress,
-        data['age'],
-        material_score.get(data['material'], 0.6),
-        soil_score.get(data['soil'], 0.4)
-    )
+#  VERY IMPORTANT GUARD
+if time_step == 0:
+    # No earthquake effects at time 0
+    G_after = G_before.copy()
 
-    data['stress'] = stress
-    data['failure_prob'] = failure_prob
-    data['status'] = 'failed' if failure_prob > 0.6 else 'healthy'
+else:
+    # Earthquake effects start only after time > 0
+    G_after = G_before.copy()
 
-# ---------------------------
-# REMOVE FAILED PIPES
-# ---------------------------
-failed_edges = [(u, v) for u, v, d in G_after.edges(data=True) if d['status'] == 'failed']
-G_after.remove_edges_from(failed_edges)
+    for u, v, data in G_after.edges(data=True):
+        base_stress = seismic_stress(magnitude, 5, data['soil'])
+        stress = temporal_stress(base_stress, time_step)
+
+        failure_prob = predict_failure_probability(
+            stress,
+            data['age'],
+            material_score.get(data['material'], 0.6),
+            soil_score.get(data['soil'], 0.4)
+        )
+
+        data['stress'] = stress
+        data['failure_prob'] = failure_prob
+
+        data['status'] = 'failed' if failure_prob > 0.6 else 'healthy'
+
+    # Remove failed pipes ONLY after time > 0
+    failed_edges = [
+        (u, v)
+        for u, v, d in G_after.edges(data=True)
+        if d['status'] == 'failed'
+    ]
+    # DO NOT REMOVE FAILED NODES
+    for u, v in failed_edges:
+        G_after.edges[u, v]["status"] = "failed"
+
+
+
 
 # ---------------------------
 # CRITICAL NODES
 # ---------------------------
-critical_nodes = [n for n in G_after.nodes if G_after.nodes[n]['priority'] >= 4]
+critical_nodes = [
+    n for n in G_after.nodes
+    if G_after.nodes[n].get('priority', 0) >= 4
+]
 
 # ---------------------------
 # ROUTING + WATER ALLOCATION
@@ -124,11 +174,16 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Before Earthquake")
-    st.plotly_chart(plot_water_network(G_before), use_container_width=True)
-
+    st.plotly_chart(
+    plot_water_network(G_before, fixed_pos, title="Before Earthquake"),
+    use_container_width=True
+)
 with col2:
     st.subheader("After Earthquake & Rerouting")
-    st.plotly_chart(plot_water_network(G_after), use_container_width=True)
+    st.plotly_chart(
+    plot_water_network(G_after, fixed_pos, title="After Earthquake & Rerouting"),
+    use_container_width=True
+)
 
 # ---------------------------
 # GIS MAP
@@ -159,8 +214,8 @@ st.subheader("📊 System Performance Metrics")
 
 m1, m2, m3 = st.columns(3)
 m1.metric("Failed Pipes", metrics["failed_pipes"])
-m2.metric("Critical Nodes Served (%)", metrics["service_ratio"])
-m3.metric("Connectivity Loss (%)", metrics["connectivity_loss"])
+m2.metric("Critical Nodes Served (%)", metrics["critical_service_ratio"])
+m3.metric("Connectivity Loss (%)", metrics["critical_connectivity_loss"])
 
 # ---------------------------
 # EXPORT

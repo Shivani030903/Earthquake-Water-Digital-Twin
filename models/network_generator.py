@@ -15,13 +15,20 @@ def generate_network(
     # CREATE NODES
     # -----------------------
     for i in range(1, n_nodes + 1):
-        node_type = "critical" if i <= 3 else "residential"
+        if i == 1:
+            node_type = "critical"   # N1 = SOURCE
+        elif i <= 3:
+            node_type = "critical"
+        else:
+            node_type = "residential"
 
         nodes.append({
             "node_id": f"N{i}",
             "type": node_type,
             "demand": random.randint(40, 150),
-            "priority": random.randint(4, 5) if node_type == "critical" else random.randint(1, 3),
+            "priority": 5 if i == 1 else (
+                random.randint(4, 5) if node_type == "critical" else random.randint(1, 3)
+        ),            
             "lat": center_lat + random.uniform(-radius, radius),
             "lon": center_lon + random.uniform(-radius, radius)
         })
