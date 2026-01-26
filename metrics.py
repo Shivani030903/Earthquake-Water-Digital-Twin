@@ -26,7 +26,11 @@ def compute_metrics(G_before, G_after, critical_nodes=None):
     # -----------------------------
     # Failed pipes
     # -----------------------------
-    failed_pipes = len(G_before.edges) - len(G_after.edges)
+    failed_pipes = sum(
+    1 for _, _, d in G_after.edges(data=True)
+    if d.get("status") == "failed"
+)
+
 
     # -----------------------------
     # Critical node connectivity

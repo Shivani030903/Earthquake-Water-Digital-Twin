@@ -1,5 +1,9 @@
 import streamlit as st
 import time
+# ---------------------------
+# FAILURE CONTROL (FOR DEMO)
+# ---------------------------
+FAILURE_THRESHOLD = 0.35
 
 from digital_twin import create_digital_twin
 from models.network_generator import generate_network
@@ -85,9 +89,11 @@ G_after = G_before.copy()
 # GEO-BASED NODE POSITIONS (lat/lon)
 # ---------------------------------
 fixed_pos = {
-    n: (d["lon"], d["lat"])
+    n: (d.get("lon"), d.get("lat"))
     for n, d in G_before.nodes(data=True)
+    if d.get("lon") is not None and d.get("lat") is not None
 }
+
 
 # ---------------------------
 # ML FEATURE MAPS
@@ -105,10 +111,6 @@ soil_score = {
     "rock": 0.3
 }
 
-# ---------------------------
-# CREATE DIGITAL TWIN
-# ---------------------------
-G_before = create_digital_twin()
 
 #  VERY IMPORTANT GUARD
 if time_step == 0:
@@ -130,10 +132,13 @@ else:
             soil_score.get(data['soil'], 0.4)
         )
 
+# 🔥 Time-based progressive damage
+        failure_prob = min(1.0, failure_prob * (1 + time_step * 0.2))
+
         data['stress'] = stress
         data['failure_prob'] = failure_prob
 
-        data['status'] = 'failed' if failure_prob > 0.6 else 'healthy'
+        data['status'] = 'failed' if failure_prob > FAILURE_THRESHOLD else 'healthy'
 
     # Remove failed pipes ONLY after time > 0
     failed_edges = [
@@ -144,6 +149,8 @@ else:
     # DO NOT REMOVE FAILED NODES
     for u, v in failed_edges:
         G_after.edges[u, v]["status"] = "failed"
+
+
 
 
 

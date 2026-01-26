@@ -7,12 +7,15 @@ import networkx as nx
 def plot_water_network(G, pos, title="Water Network"):
     fig = go.Figure()
 
-    
-
     # -------------------
-    # Draw Pipes (Edges)
+    # Draw Pipes (Edges) — SAFE
     # -------------------
     for u, v, d in G.edges(data=True):
+
+        # Skip edges if node positions missing
+        if u not in pos or v not in pos:
+            continue
+
         x0, y0 = pos[u]
         x1, y1 = pos[v]
 
@@ -29,7 +32,6 @@ def plot_water_network(G, pos, title="Water Network"):
             width = 1
             dash = "solid"
 
-
         fig.add_trace(go.Scatter(
             x=[x0, x1],
             y=[y0, y1],
@@ -45,76 +47,79 @@ def plot_water_network(G, pos, title="Water Network"):
         ))
 
     # -------------------
-    # Draw Nodes (Hierarchy)
+    # Draw Nodes (SAFE)
     # -------------------
     node_x, node_y = [], []
     node_size, node_color = [], []
     node_labels, node_hover = [], []
 
-
-
     for n, d in G.nodes(data=True):
+
+        # Skip nodes without position
+        if n not in pos:
+            continue
+
         x, y = pos[n]
         node_x.append(x)
         node_y.append(y)
 
         if n == "N1":
-            node_size.append(40)
+            node_size.append(50)
             node_color.append("blue")
             label = "N1 (Source)"
 
         elif d.get("priority", 0) >= 4:
-            node_size.append(28)
+            node_size.append(34)
             node_color.append("red")
             label = n
 
         else:
             node_size.append(18)
             node_color.append("lightgray")
-            label = n
+            label = ""   # 👈 hide labels for residential nodes
 
         node_labels.append(label)
 
         node_hover.append(
             f"Node: {n}<br>"
             f"Type: {d.get('type')}<br>"
-            f"Priority: {d.get('priority')}"
+            f"Priority: {d.get('priority')}<br>"
+            f"Demand: {d.get('demand')}"
         )
 
-    # ADD NODES TRACE (ONLY ONCE)
+    # -------------------
+    # ADD NODES TRACE
+    # -------------------
     fig.add_trace(go.Scatter(
-    x=node_x,
-    y=node_y,
-    mode='markers+text',
-    text=node_labels,          # ✅ visible labels
-    textposition="top center",
-    textfont=dict(
-        size=12,
-        color="black"
-    ),
-    hoverinfo='text',
-    hovertext=node_hover,      # ✅ hover info
-    marker=dict(
-        size=node_size,
-        color=node_color,
-        line=dict(width=1, color='black')
-    ),
-    showlegend=False
-))
-
+        x=node_x,
+        y=node_y,
+        mode='markers+text',
+        text=node_labels,
+        textposition="top center",
+        textfont=dict(size=12, color="black"),
+        hoverinfo='text',
+        hovertext=node_hover,
+        marker=dict(
+            size=node_size,
+            color=node_color,
+            line=dict(width=1, color='black')
+        ),
+        showlegend=False
+    ))
 
     # -------------------
     # Layout
     # -------------------
     fig.update_layout(
-    title=title,
-    margin=dict(l=5, r=5, t=40, b=5),
-    xaxis=dict(visible=False),
-    yaxis=dict(visible=False),
-    plot_bgcolor="white"
-)
+        title=title,
+        margin=dict(l=5, r=5, t=40, b=5),
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        plot_bgcolor="white"
+    )
 
     return fig
+
 
 
 # ==================================================
