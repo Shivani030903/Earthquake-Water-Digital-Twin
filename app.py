@@ -11,6 +11,7 @@ from models.seismic_model import seismic_stress
 from models.risk_model import compute_risk
 from models.routing_model import compute_routes
 from models.allocation_model import allocate_water
+from models.auto_rerouting import auto_reroute
 from models.time_simulation import temporal_stress
 from models.ml_failure_model import predict_failure_probability
 
@@ -116,6 +117,7 @@ soil_score = {
 if time_step == 0:
     # No earthquake effects at time 0
     G_after = G_before.copy()
+    G_operational = G_before.copy()
 
 else:
     # Earthquake effects start only after time > 0
@@ -132,12 +134,11 @@ else:
             soil_score.get(data['soil'], 0.4)
         )
 
-# 🔥 Time-based progressive damage
+    # Time-based progressive damage
         failure_prob = min(1.0, failure_prob * (1 + time_step * 0.2))
 
         data['stress'] = stress
         data['failure_prob'] = failure_prob
-
         data['status'] = 'failed' if failure_prob > FAILURE_THRESHOLD else 'healthy'
 
     # Remove failed pipes ONLY after time > 0
@@ -150,24 +151,45 @@ else:
     for u, v in failed_edges:
         G_after.edges[u, v]["status"] = "failed"
 
+    # ---------------------------------
+    # CREATE OPERATIONAL GRAPH (NO FAILED PIPES)
+    # ---------------------------------
+    G_operational = G_after.copy()
 
+    failed_edges = [
+        (u, v)
+        for u, v, d in G_operational.edges(data=True)
+        if d.get("status") == "failed"
+    ]   
 
+    G_operational.remove_edges_from(failed_edges)
+    
 
+    # ---------------------------------
+    # AUTOMATIC REROUTING (NO HUMAN)
+    # ---------------------------------
+    G_operational = auto_reroute(G_operational)
 
+    # ---------------------------------
+    # COPY REROUTED EDGES BACK FOR DISPLAY
+    # ---------------------------------
+    for u, v, d in G_operational.edges(data=True):
+        if d.get("status") == "rerouted":
+            G_after.add_edge(u, v, **d)
 
 # ---------------------------
 # CRITICAL NODES
 # ---------------------------
 critical_nodes = [
-    n for n in G_after.nodes
-    if G_after.nodes[n].get('priority', 0) >= 4
+    n for n in G_operational.nodes
+    if G_operational.nodes[n].get('priority', 0) >= 4
 ]
 
 # ---------------------------
 # ROUTING + WATER ALLOCATION
 # ---------------------------
-routes = compute_routes(G_after, "N1", critical_nodes)
-allocation = allocate_water(G_after, 500)
+routes = compute_routes(G_operational, "N1", critical_nodes)
+allocation = allocate_water(G_operational, 500)
 
 # ---------------------------
 # METRICS
