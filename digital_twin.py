@@ -1,3 +1,4 @@
+import numpy as np
 import networkx as nx
 import pandas as pd
 
@@ -34,7 +35,7 @@ def create_digital_twin():
             material=p['material'],
             age=p['age'],
             soil=p['soil'],
-            pressure_cap=p['pressure_cap'],
+            pressure_cap= np.random.choice([60, 80, 120, 150]),
             status="healthy",
             is_physical=bool(p.get("is_physical", 1)) #to show real pipes
 

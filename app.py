@@ -1,22 +1,25 @@
 import streamlit as st
 import time
+import numpy as np
+
 MAX_REROUTE_DISTANCE = 800  # meters (emergency operational limit)
 MIN_PRESSURE_REQUIRED = 80 # minimum safe pressure
 
 # ---------------------------
 # FAILURE CONTROL (FOR DEMO)
 # ---------------------------
-FAILURE_THRESHOLD = 0.35
+#FAILURE_THRESHOLD = 0.35
 
 from digital_twin import create_digital_twin
 from models.network_generator import generate_network
 from models.seismic_model import seismic_stress
-from models.risk_model import compute_risk
+#from models.risk_model import compute_risk
 from models.routing_model import compute_routes
 from models.allocation_model import allocate_water
 from models.auto_rerouting import auto_reroute
 from models.time_simulation import temporal_stress
 from models.ml_failure_model import predict_failure_probability
+
 
 from visualization import plot_water_network, plot_failure_heatmap
 from visualization_gis import plot_gis_network
@@ -121,13 +124,14 @@ if time_step == 0:
     # No earthquake effects at time 0
     G_after = G_before.copy()
     G_operational = G_before.copy()
-
+    
 else:
     # Earthquake effects start only after time > 0
     G_after = G_before.copy()
 
     for u, v, data in G_after.edges(data=True):
-        base_stress = seismic_stress(magnitude, 5, data['soil'])
+        distance = data.get("length", np.random.uniform(50, 200)) / 100
+        base_stress = seismic_stress(magnitude, distance, data['soil'])
         stress = temporal_stress(base_stress, time_step)
 
         failure_prob = predict_failure_probability(
@@ -137,48 +141,82 @@ else:
             soil_score.get(data['soil'], 0.4)
         )
 
-    # Time-based progressive damage
-        failure_prob = min(1.0, failure_prob * (1 + time_step * 0.2))
+        # ---------------------------------
+        # BACKBONE PIPE PROTECTION
+        # ---------------------------------
+        if data.get("pressure_cap", 0) > 100:
+            failure_prob *= 0.85
+
+        # Time-based progressive damage
+        failure_prob = min(
+            1.0,
+            failure_prob * (1 + 0.05 * time_step)
+        )
+
+        # ---------------------------------
+        # SAFETY CLAMP (VERY IMPORTANT)
+        # ---------------------------------
+        failure_prob = max(0.05, min(1.0, failure_prob))
 
         data['stress'] = stress
         data['failure_prob'] = failure_prob
-        data['status'] = 'failed' if failure_prob > FAILURE_THRESHOLD else 'healthy'
+
+        # ---------------------------------
+        # DYNAMIC FAILURE THRESHOLD (Finds the top 30% most risky)
+        # ---------------------------------
+        
+    all_failure_probs = [
+        d["failure_prob"]
+        for _, _, d in G_after.edges(data=True)
+    ]
+
+    if all_failure_probs:
+        raw_threshold = np.percentile(all_failure_probs, 70)
+
+        # ---- SAFETY CLAMP ----
+        FAILURE_THRESHOLD = min(raw_threshold, 0.65)
+    else:
+        FAILURE_THRESHOLD = 0.6
+   
+    
+    st.write(f"🔴 Dynamic Failure Threshold: {FAILURE_THRESHOLD:.2f}")
+
+
+    for u, v, data in G_after.edges(data=True):
+        data["status"] = (
+            "failed"
+            if data["failure_prob"] > FAILURE_THRESHOLD
+            else "healthy"
+        )
 
     # Remove failed pipes ONLY after time > 0
+    G_operational = G_after.copy()
     failed_edges = [
         (u, v)
         for u, v, d in G_after.edges(data=True)
         if d['status'] == 'failed'
     ]
+    G_operational.remove_edges_from(failed_edges)
+
+    # Automatic rerouting
+    G_operational = auto_reroute(G_operational)
+
+    # Copy rerouted edges back for display
+    for u, v, d in G_operational.edges(data=True):
+        if d.get("status") == "rerouted":
+            G_after.add_edge(
+                u, v,
+                length=d.get("length", 100),
+                material=d.get("material", "PVC"),
+                soil=d.get("soil", "sand"),
+                age=0,
+                status="rerouted"
+            )
+
+
     # DO NOT REMOVE FAILED NODES
     for u, v in failed_edges:
         G_after.edges[u, v]["status"] = "failed"
-
-    # ---------------------------------
-    # CREATE OPERATIONAL GRAPH (NO FAILED PIPES)
-    # ---------------------------------
-    G_operational = G_after.copy()
-
-    failed_edges = [
-        (u, v)
-        for u, v, d in G_operational.edges(data=True)
-        if d.get("status") == "failed"
-    ]   
-
-    G_operational.remove_edges_from(failed_edges)
-    
-
-    # ---------------------------------
-    # AUTOMATIC REROUTING (NO HUMAN)
-    # ---------------------------------
-    G_operational = auto_reroute(G_operational)
-
-    # ---------------------------------
-    # COPY REROUTED EDGES BACK FOR DISPLAY
-    # ---------------------------------
-    for u, v, d in G_operational.edges(data=True):
-        if d.get("status") == "rerouted":
-            G_after.add_edge(u, v, **d)
 
 # ---------------------------
 # CRITICAL NODES
