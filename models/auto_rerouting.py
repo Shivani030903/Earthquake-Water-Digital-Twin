@@ -1,6 +1,8 @@
 import networkx as nx
 from models.routing_model import add_rerouted_pipe
 
+MAX_REROUTE_DISTANCE = 800
+MIN_PRESSURE_REQUIRED = 80
 def auto_reroute(G, source="N1"):
     """
     Automatically adds logical reroute edges
@@ -39,9 +41,43 @@ def auto_reroute(G, source="N1"):
                 continue
 
             # -------------------------------------------------
-            # STEP 4: Add logical reroute edge
+            # STEP 4: Add logical reroute edge (Rerouting distance is computed along existing pipes instead of direct node jumps.)
             # -------------------------------------------------
-            add_rerouted_pipe(G, donor, critical)
+            try:
+                dist = nx.shortest_path_length(
+                    G,
+                    donor,
+                    critical,
+                    weight="length"
+                )
+            except nx.NetworkXNoPath:
+                continue
+
+            # Reject long-distance reroutes
+            if dist > MAX_REROUTE_DISTANCE:
+                continue
+
+            path = nx.shortest_path(G, donor, critical, weight="length")
+
+            min_pressure = min(
+                G.edges[path[i], path[i + 1]].get("pressure_cap", 0)
+                for i in range(len(path) - 1)
+            )
+
+            if min_pressure < MIN_PRESSURE_REQUIRED:
+                continue
+
+            # -------------------------------------------------
+            # ✅ STEP 6: ADD REROUTED PIPE 
+            # -------------------------------------------------
+            add_rerouted_pipe(
+                G,
+                donor,
+                critical,
+                length=dist,
+                failure_prob=0.1
+            )
+
 
             # Only one reroute per critical node
             break

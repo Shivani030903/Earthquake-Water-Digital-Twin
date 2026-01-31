@@ -1,5 +1,8 @@
 import streamlit as st
 import time
+MAX_REROUTE_DISTANCE = 800  # meters (emergency operational limit)
+MIN_PRESSURE_REQUIRED = 80 # minimum safe pressure
+
 # ---------------------------
 # FAILURE CONTROL (FOR DEMO)
 # ---------------------------

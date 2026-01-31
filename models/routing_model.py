@@ -36,18 +36,16 @@ def remove_failed_pipes(G):
 # ------------------------------
 # ADD REROUTED (LOGICAL) EDGES
 # ------------------------------
-def add_rerouted_pipe(G, u, v):
-    """
-    Adds a logical reroute edge (NOT a real pipe)
-    """
+def add_rerouted_pipe(G, u, v, length, failure_prob=0.1):
     G.add_edge(
         u, v,
         status="rerouted",
-        is_physical=False,   # 🚫 NOT a real pipe
-        failure_prob=0.0,
-        length=0             # logical edge
+        is_physical=False,
+        failure_prob=failure_prob,
+        length=length
     )
     return G
+
 
 def mark_supply_status(G, source="N1"):
     for n in G.nodes:
